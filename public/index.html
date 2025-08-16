@@ -122,10 +122,10 @@
     </div>
     
     <div id="loader" class="text-center my-3" style="display:none;">
-    <div class="spinner-border text-primary" role="status">
-      <span class="visually-hidden">Loading...</span>
-    </div>
-    <p>Translating...</p>
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p>Translating...</p>
     </div>
 
     <!-- Transcripts -->
@@ -143,114 +143,117 @@
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<script>
-  const textInput = document.getElementById("textInput");
-  const sendTextBtn = document.getElementById("sendTextBtn");
-  const startVoiceBtn = document.getElementById("startVoiceBtn");
-  const stopVoiceBtn = document.getElementById("stopVoiceBtn");
-  const speakBtn = document.getElementById("speakBtn");
-  const clearBtn = document.getElementById("clearBtn");
-  const originalTextDiv = document.getElementById("originalText");
-  const translatedTextDiv = document.getElementById("translatedText");
-  const sourceLangSelect = document.getElementById("sourceLang");
-  const targetLangSelect = document.getElementById("targetLang");
-  const loader = document.getElementById("loader");
+  <script>
+    const textInput = document.getElementById("textInput");
+    const sendTextBtn = document.getElementById("sendTextBtn");
+    const startVoiceBtn = document.getElementById("startVoiceBtn");
+    const stopVoiceBtn = document.getElementById("stopVoiceBtn");
+    const speakBtn = document.getElementById("speakBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const originalTextDiv = document.getElementById("originalText");
+    const translatedTextDiv = document.getElementById("translatedText");
+    const sourceLangSelect = document.getElementById("sourceLang");
+    const targetLangSelect = document.getElementById("targetLang");
+    const loader = document.getElementById("loader");
 
-  let recognition;
-  let finalTranscript = "";
+    // Voice recognition variables
+    let recognition;
+    let finalTranscript = "";
 
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = true;
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = true;
 
-    recognition.onresult = async (event) => {
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          // Only process final transcript once
-          await processText(transcript);
-          finalTranscript += transcript + " ";
-        } else {
-          interimTranscript += transcript;
+      recognition.onresult = (event) => {
+        let interimTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + " ";
+          } else {
+            interimTranscript += transcript;
+          }
         }
-      }
-      // Display live interim transcript without duplicating final
-      originalTextDiv.innerText = finalTranscript + interimTranscript;
-    };
+        // Show live transcript
+        originalTextDiv.innerText = finalTranscript + interimTranscript;
+      };
 
-    recognition.onerror = (e) => {
-      console.error("Speech recognition error:", e.error);
-      if (e.error === "not-allowed" || e.error === "permission-denied") {
-        alert("Microphone access denied. Please allow access to use voice input.");
-      } else if (e.error === "no-speech") {
-        alert("No speech detected. Please try again.");
-      }
-    };
-  } else {
-    alert("Sorry, your browser does not support voice input. Please use text input instead.");
-    startVoiceBtn.disabled = true;
-    stopVoiceBtn.disabled = true;
-  }
+      recognition.onerror = (e) => {
+        console.error("Speech recognition error:", e.error);
+      };
 
-  // Event listeners
-  sendTextBtn.addEventListener("click", () => processText(textInput.value));
-  speakBtn.addEventListener("click", () => speakText(translatedTextDiv.innerText));
-  startVoiceBtn.addEventListener("click", () => recognition && recognition.start());
-  stopVoiceBtn.addEventListener("click", () => recognition && recognition.stop());
-  clearBtn.addEventListener("click", () => {
-    originalTextDiv.innerHTML = "";
-    translatedTextDiv.innerHTML = "";
-    finalTranscript = "";
-  });
-
-  async function processText(text) {
-    if (!text.trim()) return;
-    if (textInput.value) textInput.value = "";
-
-    const sourceLang = sourceLangSelect.value;
-    const targetLang = targetLangSelect.value;
-
-    try {
-      loader.style.display = "block";
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, sourceLang, targetLang })
+      startVoiceBtn.addEventListener("click", () => {
+        finalTranscript = ""; // reset buffer each time you start
+        recognition.start();
       });
-      const data = await res.json();
-      loader.style.display = "none";
 
-      if (!res.ok) {
-        alert(data.error || "Translation failed. Please try again.");
-        return;
-      }
-
-      const originalLine = document.createElement("div");
-      originalLine.textContent = data.correctedText || text;
-      originalTextDiv.appendChild(originalLine);
-
-      const translatedLine = document.createElement("div");
-      translatedLine.textContent = data.translatedText || "";
-      translatedTextDiv.appendChild(translatedLine);
-    } catch (err) {
-      loader.style.display = "none";
-      alert("Network or server error: " + err.message);
+      stopVoiceBtn.addEventListener("click", async () => {
+        recognition.stop();
+        if (finalTranscript.trim() !== "") {
+          await processText(finalTranscript.trim()); // send all recorded text at once
+          finalTranscript = ""; // clear buffer
+        }
+      });
+    } else {
+      alert("Sorry, your browser does not support voice input.");
+      startVoiceBtn.disabled = true;
+      stopVoiceBtn.disabled = true;
     }
-  }
 
-  function speakText(text) {
-    if (!text) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = targetLangSelect.value === "es" ? "es-ES" : targetLangSelect.value + "-" + targetLangSelect.value.toUpperCase();
-    speechSynthesis.speak(utterance);
-  }
-</script>
+    // Event listeners
+    sendTextBtn.addEventListener("click", () => processText(textInput.value));
+    speakBtn.addEventListener("click", () => speakText(translatedTextDiv.innerText));
+    clearBtn.addEventListener("click", () => {
+      originalTextDiv.innerHTML = "";
+      translatedTextDiv.innerHTML = "";
+      finalTranscript = "";
+    });
 
+    async function processText(text) {
+      if (!text.trim()) return;
+      if (textInput.value) textInput.value = "";
 
+      const sourceLang = sourceLangSelect.value;
+      const targetLang = targetLangSelect.value;
+
+      try {
+        loader.style.display = "block";
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, sourceLang, targetLang })
+        });
+        const data = await res.json();
+        loader.style.display = "none";
+
+        if (!res.ok) {
+          alert(data.error || "Translation failed. Please try again.");
+          return;
+        }
+
+        const originalLine = document.createElement("div");
+        originalLine.textContent = data.correctedText || text;
+        originalTextDiv.appendChild(originalLine);
+
+        const translatedLine = document.createElement("div");
+        translatedLine.textContent = data.translatedText || "";
+        translatedTextDiv.appendChild(translatedLine);
+      } catch (err) {
+        loader.style.display = "none";
+        alert("Network or server error: " + err.message);
+      }
+    }
+
+    function speakText(text) {
+      if (!text) return;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = targetLangSelect.value === "es" ? "es-ES" : targetLangSelect.value + "-" + targetLangSelect.value.toUpperCase();
+      speechSynthesis.speak(utterance);
+    }
+  </script>
 </body>
 </html>
